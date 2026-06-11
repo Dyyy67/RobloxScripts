@@ -1,0 +1,117 @@
+-- =======================================================================
+-- Wizard West Aimbot & UI Toggle Script
+-- Paste this entire block into Solara or a LocalScript in the Player folder
+-- =======================================================================
+
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+
+-- ----------------------------------------------------------------------
+-- 1. Configuration – tweak these to match your play style
+-- ----------------------------------------------------------------------
+local AIMSPEED = 50                     -- Aim speed (higher = faster)
+local TARGETDISTANCE = 10               -- Distance (meters) from character to target
+local UI_TOGGLE_KEY = "KeyF"            -- Key to toggle aim
+local STAMINA_UNLI_KEY = "KeyG"         -- Key to toggle infinite stamina
+
+-- ----------------------------------------------------------------------
+-- 2. Local references – the script will auto‑find your local player & character
+-- ----------------------------------------------------------------------
+local player = Players.LocalPlayer
+local character = player.Character
+local humanoid = character:FindFirstChild("Humanoid")
+-- Create a local target part (you can replace this with an existing Model or Part)
+local target = Instance.new("Part")
+target.Name = "WizardWestTarget"
+target.Size = Vector3.new(1, 1, 1)
+target.Position = CFrame.new(0, 0, 10)   -- Adjust start position; will auto‑update on character add
+target.Parent = game.Workspace
+
+-- ----------------------------------------------------------------------
+-- 3. UI element – a small button in the top‑left corner
+-- ----------------------------------------------------------------------
+local uiToggle = Instance.new("ScreenGui")
+uiToggle.Name = "WizardWestUI"
+local toggleButton = Instance.new("TextButton")
+toggleButton.Name = "ToggleAim"
+toggleButton.Size = UDim2.New(100, 0, 50, 0)
+toggleButton.Position = UDim2.New(10, 10, 10, 10)
+toggleButton.Text = "Toggle Aim"
+toggleButton.Parent = uiToggle
+toggleButton.Parent:Invoke("Appearance", "BackgroundColor3", Color3.fromRGB(65, 65, 65))
+
+-- ----------------------------------------------------------------------
+-- 4. State variables
+-- ----------------------------------------------------------------------
+local _aiming = false
+local _infiniteStamina = false
+
+-- ----------------------------------------------------------------------
+-- 5. Helper functions
+-- ----------------------------------------------------------------------
+-- Aim at the target: smoothly rotate the character’s CFrame to face the target
+local function AimAtTarget()
+    if not _aiming then
+        local lookCFrame = CFrame.new(character.Head.Position)
+            * CFrame.lookAt(character.Head.Position, target.Position)
+        local tweenInfo = TweenInfo.New(0.5, Enum.EasingStyle.Linear)
+        local tween = TweenService:Create(character, tweenInfo, {
+            CFrame = lookCFrame
+        })
+        tween:Play()
+        _aiming = true
+    end
+end
+
+-- Apply infinite stamina: double walk speed for a short period (or keep it forever if you want)
+local function ApplyInfiniteStamina()
+    if not _infiniteStamina then
+        local walkSpeed = humanoid.WalkSpeed
+        local tweenInfo = TweenInfo.New(0.1, Enum.EasingStyle.Linear)
+        local tween = TweenService:Create(humanoid, tweenInfo, {
+            WalkSpeed = walkSpeed * 2   -- double speed for a moment
+        })
+        tween:Play()
+        _infiniteStamina = true
+    end
+end
+
+-- ----------------------------------------------------------------------
+-- 6. Event connections
+-- ----------------------------------------------------------------------
+-- When a new character is added, set up the target position relative to the character
+player.CharacterAdded:Connect(function(char)
+    character.Parent = game.Workspace
+    humanoid = char:FindFirstChild("Humanoid")
+    -- Recalculate target position so it’s 10m away from the new character
+    target.Position = CFrame.new(character.Head.Position).lookVector * TARGETDISTANCE
+end)
+
+-- Continuous heartbeat for aiming & stamina
+RunService.Heartbeat:Connect(function()
+    if _aiming then
+        AimAtTarget()
+    end
+    if _infiniteStamina then
+        ApplyInfiniteStamina()
+    end
+end)
+
+-- ----------------------------------------------------------------------
+-- 7. UI button interaction
+-- ----------------------------------------------------------------------
+toggleButton.MouseButtons[1].Enter:Connect(function()
+    _aiming = not _aiming
+    -- Update button text to show state
+    toggleButton.Text = (_aiming and "Aim Active" or "Toggle Aim")
+end)
+
+-- Key press for infinite stamina (optional)
+player.InputBegan:Connect(function(input, gameProcessed)
+    if input.KeyCode == UI_TOGGLE_KEY then
+        _infiniteStamina = not _infiniteStamina
+        toggleButton.Text = (_infiniteStamina and "Stamina Active" or "Toggle Stamina")
+    end
+end)
+
