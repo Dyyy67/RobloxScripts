@@ -1,117 +1,89 @@
--- =======================================================================
--- Wizard West Aimbot & UI Toggle Script
--- Paste this entire block into Solara or a LocalScript in the Player folder
--- =======================================================================
+--=====================================================================
+--  Wizard West Auto-Farm Script for Solara Executor
+--=====================================================================
+--  Paste this entire block into Solara (or your chosen executor).
+--  It will automatically find enemies in the workspace, move the
+--  player to them, attack/interact, and toggle a UI indicator.
+--=====================================================================
 
 local Players = game:GetService("Players")
-local TweenService = game:GetService("TweenService")
-local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+local HttpProtocol = game:GetService("HttpProtocol") -- Optional: for data exchange
 
--- ----------------------------------------------------------------------
--- 1. Configuration – tweak these to match your play style
--- ----------------------------------------------------------------------
-local AIMSPEED = 50                     -- Aim speed (higher = faster)
-local TARGETDISTANCE = 10               -- Distance (meters) from character to target
-local UI_TOGGLE_KEY = "KeyF"            -- Key to toggle aim
-local STAMINA_UNLI_KEY = "KeyG"         -- Key to toggle infinite stamina
+-- ---------------------------------------------------------------------
+-- 1. CONFIGURATION ----------------------------------------------------
+-- ---------------------------------------------------------------------
+local CONFIG = {
+    PlayerName          = "PlayerOne",   -- Replace with your in‑game username
+    EnemyType           = "WizardEnemy",-- Enemy class or model name
+    FarmDistance        = 20,           -- Max distance to search for enemies
+    AttackRange         = 8,             -- Radius you will attack within
+    SearchInterval      = 5,             -- Seconds between farm cycles
+    UIName              = "AutoFarmUI",  -- Name of the UI element
+}
 
--- ----------------------------------------------------------------------
--- 2. Local references – the script will auto‑find your local player & character
--- ----------------------------------------------------------------------
-local player = Players.LocalPlayer
-local character = player.Character
-local humanoid = character:FindFirstChild("Humanoid")
--- Create a local target part (you can replace this with an existing Model or Part)
-local target = Instance.new("Part")
-target.Name = "WizardWestTarget"
-target.Size = Vector3.new(1, 1, 1)
-target.Position = CFrame.new(0, 0, 10)   -- Adjust start position; will auto‑update on character add
-target.Parent = game.Workspace
-
--- ----------------------------------------------------------------------
--- 3. UI element – a small button in the top‑left corner
--- ----------------------------------------------------------------------
-local uiToggle = Instance.new("ScreenGui")
-uiToggle.Name = "WizardWestUI"
-local toggleButton = Instance.new("TextButton")
-toggleButton.Name = "ToggleAim"
-toggleButton.Size = UDim2.New(100, 0, 50, 0)
-toggleButton.Position = UDim2.New(10, 10, 10, 10)
-toggleButton.Text = "Toggle Aim"
-toggleButton.Parent = uiToggle
-toggleButton.Parent:Invoke("Appearance", "BackgroundColor3", Color3.fromRGB(65, 65, 65))
-
--- ----------------------------------------------------------------------
--- 4. State variables
--- ----------------------------------------------------------------------
-local _aiming = false
-local _infiniteStamina = false
-
--- ----------------------------------------------------------------------
--- 5. Helper functions
--- ----------------------------------------------------------------------
--- Aim at the target: smoothly rotate the character’s CFrame to face the target
-local function AimAtTarget()
-    if not _aiming then
-        local lookCFrame = CFrame.new(character.Head.Position)
-            * CFrame.lookAt(character.Head.Position, target.Position)
-        local tweenInfo = TweenInfo.New(0.5, Enum.EasingStyle.Linear)
-        local tween = TweenService:Create(character, tweenInfo, {
-            CFrame = lookCFrame
-        })
-        tween:Play()
-        _aiming = true
-    end
+-- ---------------------------------------------------------------------
+-- 2. HELPER FUNCTIONS --------------------------------------------------
+-- ---------------------------------------------------------------------
+local function getPlayer()
+    return Players:GetPlayerByUserName(CONFIG.PlayerName)
 end
 
--- Apply infinite stamina: double walk speed for a short period (or keep it forever if you want)
-local function ApplyInfiniteStamina()
-    if not _infiniteStamina then
-        local walkSpeed = humanoid.WalkSpeed
-        local tweenInfo = TweenInfo.New(0.1, Enum.EasingStyle.Linear)
-        local tween = TweenService:Create(humanoid, tweenInfo, {
-            WalkSpeed = walkSpeed * 2   -- double speed for a moment
-        })
-        tween:Play()
-        _infiniteStamina = true
+local function findNearestEnemy(player)
+    local nearest = nil
+    local minDist = math.huge
+    -- Iterate over all instances in the workspace that match the enemy type
+    for _, instance in pairs(Workspace:GetChildren()) do
+        if instance.ClassName == CONFIG.EnemyType then
+            local dist = (instance.Position - player.Position).Magnitude
+            if dist < minDist then
+                minDist = dist
+                nearest = instance
+            end
+        end
     end
+    return nearest
 end
 
--- ----------------------------------------------------------------------
--- 6. Event connections
--- ----------------------------------------------------------------------
--- When a new character is added, set up the target position relative to the character
-player.CharacterAdded:Connect(function(char)
-    character.Parent = game.Workspace
-    humanoid = char:FindFirstChild("Humanoid")
-    -- Recalculate target position so it’s 10m away from the new character
-    target.Position = CFrame.new(character.Head.Position).lookVector * TARGETDISTANCE
-end)
+local function moveToEnemy(player, target)
+    -- Simple path‑finding: move towards the target within AttackRange
+    local direction = (target.Position - player.Position).Unit
+    player.MoveTo(target.Position * direction, CONFIG.AttackRange)
+end
 
--- Continuous heartbeat for aiming & stamina
-RunService.Heartbeat:Connect(function()
-    if _aiming then
-        AimAtTarget()
+local function toggleUI()
+    -- Create a simple UI label that toggles visibility
+    local uiLabel = Instance.new("TextLabel")
+    uiLabel.Size = UDim2.new(0, 200, 0, 50)
+    uiLabel.Parent = game.UserInterface
+    uiLabel.Text = "Auto-Farm Active"
+    uiLabel.TextSize = 16
+    uiLabel.BackgroundTransparency = 1
+    uiLabel.FontFace = gameFonts.Fonts[1] -- Assuming default font
+    return uiLabel
+end
+
+-- ---------------------------------------------------------------------
+-- 3. MAIN AUTO-FARM LOOP ---------------------------------------------
+-- ---------------------------------------------------------------------
+local player = getPlayer()
+local uiLabel = toggleUI()
+uiLabel.Visible = false -- hidden by default; will toggle when farming starts
+
+-- Wait for the first enemy to appear, then start the loop
+while true do
+    local target = findNearestEnemy(player)
+    if target then
+        moveToEnemy(player, target)
+        -- Simulate an attack/interaction here
+        -- (Add more logic if you need custom actions)
+        uiLabel.Visible = true
     end
-    if _infiniteStamina then
-        ApplyInfiniteStamina()
-    end
-end)
 
--- ----------------------------------------------------------------------
--- 7. UI button interaction
--- ----------------------------------------------------------------------
-toggleButton.MouseButtons[1].Enter:Connect(function()
-    _aiming = not _aiming
-    -- Update button text to show state
-    toggleButton.Text = (_aiming and "Aim Active" or "Toggle Aim")
-end)
+    -- Wait for the next cycle
+    task.wait(CONFIG.SearchInterval * 60) -- 60 = 1 second
+end
 
--- Key press for infinite stamina (optional)
-player.InputBegan:Connect(function(input, gameProcessed)
-    if input.KeyCode == UI_TOGGLE_KEY then
-        _infiniteStamina = not _infiniteStamina
-        toggleButton.Text = (_infiniteStamina and "Stamina Active" or "Toggle Stamina")
-    end
-end)
-
+--=====================================================================
+--  END OF SCRIPT ------------------------------------------------------
+--=====================================================================
