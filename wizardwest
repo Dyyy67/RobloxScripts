@@ -1,5 +1,5 @@
 --=====================================================================
---  Wizard West Auto-Farm Script (Player-Safe Version)
+--  Wizard West Auto-Farm Script (Equipped Weapon Only)
 --=====================================================================
 
 local Players = game:GetService("Players")
@@ -9,12 +9,29 @@ local Workspace = game:GetService("Workspace")
 -- 1. CONFIGURATION
 -- ---------------------------------------------------------------------
 local CONFIG = {
-    EnemyName       = "WizardEnemy", -- The exact name of the monster to farm
+    -- Set to true to attack ANY Humanoid that isn't a player.
+    -- Set to false to ONLY attack the specific names in the list below.
+    AttackAnyNPC    = false, 
+    
+    -- Wizard West enemies and Nightfall variants
+    EnemyNames      = {
+        "Spider", 
+        "Nightfall Spider",
+        "NightfallSpider",
+        "Dark Wizard", 
+        "DarkWizard",
+        "Ghoul", 
+        "Ice Golem", 
+        "IceGolem",
+        "Troll", 
+        "Slime", 
+        "Bandit"
+    }, 
+    
     FarmDistance    = 300,           -- Max search distance
-    AttackDistance  = 5,             -- How close to get before swinging weapon
+    AttackDistance  = 15,            -- Distance to attack from (Wands have range, so 15 is safe)
     SearchInterval  = 0.5,           -- Wait time between finding new targets
     UIName          = "AutoFarmUI",
-    WeaponName      = "Sword",       -- Put the exact name of your weapon here!
 }
 
 local player = Players.LocalPlayer
@@ -22,6 +39,32 @@ local player = Players.LocalPlayer
 -- ---------------------------------------------------------------------
 -- 2. HELPER FUNCTIONS
 -- ---------------------------------------------------------------------
+local function isValidTargetName(name)
+    if CONFIG.AttackAnyNPC then return true end
+    
+    for _, enemyName in ipairs(CONFIG.EnemyNames) do
+        if name == enemyName then
+            return true
+        end
+    end
+    return false
+end
+
+-- ONLY checks the character for a currently equipped tool
+local function getEquippedWeapon()
+    local char = player.Character
+    if not char then return nil end
+    
+    -- When a tool is equipped, it is moved from the Backpack to the Character model
+    for _, item in ipairs(char:GetChildren()) do
+        if item:IsA("Tool") then
+            return item
+        end
+    end
+    
+    return nil
+end
+
 local function findNearestMonster()
     if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then 
         return nil 
@@ -31,22 +74,20 @@ local function findNearestMonster()
     local nearest = nil
     local minDist = CONFIG.FarmDistance
 
-    -- Iterate over workspace to find enemies
     for _, instance in pairs(Workspace:GetChildren()) do
-        if instance:IsA("Model") and instance.Name == CONFIG.EnemyName then
-            local humanoid = instance:FindFirstChild("Humanoid")
-            local enemyRoot = instance:FindFirstChild("HumanoidRootPart")
-            
-            -- Check if it has health AND is alive
-            if humanoid and enemyRoot and humanoid.Health > 0 then
+        if instance:IsA("Model") then
+            if isValidTargetName(instance.Name) then
+                local humanoid = instance:FindFirstChildOfClass("Humanoid")
+                local enemyRoot = instance:FindFirstChild("HumanoidRootPart")
                 
-                -- CRITICAL: Ensure this is NOT a player
-                if not Players:GetPlayerFromCharacter(instance) then
-                    
-                    local dist = (enemyRoot.Position - rootPart.Position).Magnitude
-                    if dist < minDist then
-                        minDist = dist
-                        nearest = instance
+                if humanoid and enemyRoot and humanoid.Health > 0 then
+                    -- Ensure this is NOT a human player
+                    if not Players:GetPlayerFromCharacter(instance) then
+                        local dist = (enemyRoot.Position - rootPart.Position).Magnitude
+                        if dist < minDist then
+                            minDist = dist
+                            nearest = instance
+                        end
                     end
                 end
             end
@@ -59,29 +100,24 @@ local function attackEnemy(target)
     local char = player.Character
     if not char then return end
 
-    local humanoid = char:FindFirstChild("Humanoid")
+    local humanoid = char:FindFirstChildOfClass("Humanoid")
     local rootPart = char:FindFirstChild("HumanoidRootPart")
     if not humanoid or not rootPart then return end
 
     local dist = (target.HumanoidRootPart.Position - rootPart.Position).Magnitude
 
-    -- 1. Move to the enemy
+    -- Move to the enemy
     if dist > CONFIG.AttackDistance then
         humanoid:MoveTo(target.HumanoidRootPart.Position)
     else
-        -- 2. Stop moving once close enough
+        -- Stop moving once in range
         humanoid:MoveTo(rootPart.Position) 
         
-        -- 3. Equip weapon if it's in the backpack
-        local weapon = player.Backpack:FindFirstChild(CONFIG.WeaponName)
+        -- Auto-detect and use ONLY the currently equipped weapon
+        local weapon = getEquippedWeapon()
         if weapon then
-            humanoid:EquipTool(weapon)
-        end
-        
-        -- 4. Use the weapon (Simulates clicking)
-        local equippedWeapon = char:FindFirstChild(CONFIG.WeaponName)
-        if equippedWeapon then
-            equippedWeapon:Activate()
+            -- Use the weapon (Simulates clicking the mouse)
+            weapon:Activate()
         end
     end
 end
@@ -98,11 +134,11 @@ local function setupUI()
     uiLabel.Size = UDim2.new(0, 200, 0, 50)
     uiLabel.Position = UDim2.new(0.5, -100, 0, 0)
     uiLabel.Parent = screenGui
-    uiLabel.Text = "Farming Monsters..."
+    uiLabel.Text = "Farming NPCs..."
     uiLabel.TextSize = 18
     uiLabel.Font = Enum.Font.GothamBold
     uiLabel.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-    uiLabel.TextColor3 = Color3.fromRGB(100, 255, 100) -- Green text
+    uiLabel.TextColor3 = Color3.fromRGB(0, 255, 255) 
     uiLabel.BackgroundTransparency = 0.5
     uiLabel.Visible = false
     
