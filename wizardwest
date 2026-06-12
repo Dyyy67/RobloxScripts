@@ -1,94 +1,66 @@
 --=====================================================================
---  Wizard West Auto-Farm Script (Equipped Weapon Only)
+--  Wizard West Auto-Farm Script (Flight-Friendly + K-Toggle UI)
 --=====================================================================
 
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
+local UserInputService = game:GetService("UserInputService")
 
 -- ---------------------------------------------------------------------
 -- 1. CONFIGURATION
 -- ---------------------------------------------------------------------
 local CONFIG = {
-    -- Set to true to attack ANY Humanoid that isn't a player.
-    -- Set to false to ONLY attack the specific names in the list below.
     AttackAnyNPC    = false, 
-    
-    -- Wizard West enemies and Nightfall variants
     EnemyNames      = {
-        "Spider", 
-        "Nightfall Spider",
-        "NightfallSpider",
-        "Dark Wizard", 
-        "DarkWizard",
-        "Ghoul", 
-        "Ice Golem", 
-        "IceGolem",
-        "Troll", 
-        "Slime", 
-        "Bandit"
+        "Spider", "Nightfall Spider", "NightfallSpider",
+        "Dark Wizard", "DarkWizard", "Ghoul", 
+        "Ice Golem", "IceGolem", "Troll", "Slime", "Bandit"
     }, 
-    
-    FarmDistance    = 300,           -- Max search distance
-    AttackDistance  = 15,            -- Distance to attack from (Wands have range, so 15 is safe)
-    SearchInterval  = 0.5,           -- Wait time between finding new targets
+    FarmDistance    = 300,
+    AttackDistance  = 15,
+    SearchInterval  = 0.5,
     UIName          = "AutoFarmUI",
+    ToggleKey       = Enum.KeyCode.K -- Press K to hide/show UI
 }
 
 local player = Players.LocalPlayer
+local uiEnabled = true
 
 -- ---------------------------------------------------------------------
 -- 2. HELPER FUNCTIONS
 -- ---------------------------------------------------------------------
 local function isValidTargetName(name)
     if CONFIG.AttackAnyNPC then return true end
-    
     for _, enemyName in ipairs(CONFIG.EnemyNames) do
-        if name == enemyName then
-            return true
-        end
+        if name == enemyName then return true end
     end
     return false
 end
 
--- ONLY checks the character for a currently equipped tool
 local function getEquippedWeapon()
     local char = player.Character
     if not char then return nil end
-    
-    -- When a tool is equipped, it is moved from the Backpack to the Character model
     for _, item in ipairs(char:GetChildren()) do
-        if item:IsA("Tool") then
-            return item
-        end
+        if item:IsA("Tool") then return item end
     end
-    
     return nil
 end
 
 local function findNearestMonster()
-    if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then 
-        return nil 
-    end
-    
+    if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then return nil end
     local rootPart = player.Character.HumanoidRootPart
     local nearest = nil
     local minDist = CONFIG.FarmDistance
 
     for _, instance in pairs(Workspace:GetChildren()) do
-        if instance:IsA("Model") then
-            if isValidTargetName(instance.Name) then
-                local humanoid = instance:FindFirstChildOfClass("Humanoid")
-                local enemyRoot = instance:FindFirstChild("HumanoidRootPart")
-                
-                if humanoid and enemyRoot and humanoid.Health > 0 then
-                    -- Ensure this is NOT a human player
-                    if not Players:GetPlayerFromCharacter(instance) then
-                        local dist = (enemyRoot.Position - rootPart.Position).Magnitude
-                        if dist < minDist then
-                            minDist = dist
-                            nearest = instance
-                        end
-                    end
+        if instance:IsA("Model") and isValidTargetName(instance.Name) then
+            local humanoid = instance:FindFirstChildOfClass("Humanoid")
+            local enemyRoot = instance:FindFirstChild("HumanoidRootPart")
+            if humanoid and enemyRoot and humanoid.Health > 0 and not Players:GetPlayerFromCharacter(instance) then
+                local dist = (enemyRoot.Position - rootPart.Position).Magnitude
+                if dist < minDist then
+                    minDist = dist
+                    nearest = instance
                 end
             end
         end
@@ -99,66 +71,46 @@ end
 local function attackEnemy(target)
     local char = player.Character
     if not char then return end
-
     local humanoid = char:FindFirstChildOfClass("Humanoid")
-    local rootPart = char:FindFirstChild("HumanoidRootPart")
-    if not humanoid or not rootPart then return end
+    if not humanoid then return end
 
-    local dist = (target.HumanoidRootPart.Position - rootPart.Position).Magnitude
+    local dist = (target.HumanoidRootPart.Position - char.HumanoidRootPart.Position).Magnitude
 
-    -- Move to the enemy
     if dist > CONFIG.AttackDistance then
         humanoid:MoveTo(target.HumanoidRootPart.Position)
     else
-        -- Stop moving once in range
-        humanoid:MoveTo(rootPart.Position) 
-        
-        -- Auto-detect and use ONLY the currently equipped weapon
+        humanoid:MoveTo(char.HumanoidRootPart.Position) 
         local weapon = getEquippedWeapon()
-        if weapon then
-            -- Use the weapon (Simulates clicking the mouse)
-            weapon:Activate()
-        end
+        if weapon then weapon:Activate() end
     end
 end
 
-local function setupUI()
-    local playerGui = player:WaitForChild("PlayerGui")
-    
-    local screenGui = Instance.new("ScreenGui")
-    screenGui.Name = CONFIG.UIName
-    screenGui.ResetOnSpawn = false
-    screenGui.Parent = playerGui
+-- ---------------------------------------------------------------------
+-- 3. UI SETUP AND TOGGLE
+-- ---------------------------------------------------------------------
+local screenGui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
+screenGui.Name = CONFIG.UIName
+local uiLabel = Instance.new("TextLabel", screenGui)
+uiLabel.Size = UDim2.new(0, 200, 0, 50)
+uiLabel.Position = UDim2.new(0.5, -100, 0, 0)
+uiLabel.Text = "Auto-Farm: ON (Press K to hide)"
+uiLabel.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+uiLabel.TextColor3 = Color3.fromRGB(0, 255, 255)
 
-    local uiLabel = Instance.new("TextLabel")
-    uiLabel.Size = UDim2.new(0, 200, 0, 50)
-    uiLabel.Position = UDim2.new(0.5, -100, 0, 0)
-    uiLabel.Parent = screenGui
-    uiLabel.Text = "Farming NPCs..."
-    uiLabel.TextSize = 18
-    uiLabel.Font = Enum.Font.GothamBold
-    uiLabel.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-    uiLabel.TextColor3 = Color3.fromRGB(0, 255, 255) 
-    uiLabel.BackgroundTransparency = 0.5
-    uiLabel.Visible = false
-    
-    return uiLabel
-end
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if input.KeyCode == CONFIG.ToggleKey then
+        uiEnabled = not uiEnabled
+        uiLabel.Visible = uiEnabled
+    end
+end)
 
 -- ---------------------------------------------------------------------
--- 3. MAIN AUTO-FARM LOOP
+-- 4. MAIN LOOP
 -- ---------------------------------------------------------------------
-local uiLabel = setupUI()
-
 while true do
     local target = findNearestMonster()
-    
     if target then
-        uiLabel.Visible = true
         attackEnemy(target)
-    else
-        uiLabel.Visible = false
     end
-
     task.wait(CONFIG.SearchInterval) 
 end
